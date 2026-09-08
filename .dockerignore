@@ -1,0 +1,7 @@
+.git
+.gitignore
+__pycache__/
+*.pyc
+known_faces/
+voice_cache/
+debug_frames/

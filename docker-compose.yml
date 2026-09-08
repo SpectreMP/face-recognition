@@ -1,0 +1,50 @@
+services:
+  server:
+    build: .
+    image: face-server
+    container_name: face-server
+    # --tts-voice ru: в Linux-контейнере TTS работает через espeak,
+    # без явного голоса кириллица будет прочитана английским синтезом
+    command: python server.py --no-debug --tts-voice ru
+    ports:
+      - "5555:5555"   # видео PULL
+      - "5556:5556"   # команды PUB
+      - "8080:8080"   # веб-панель
+    volumes:
+      - ./known_faces:/app/known_faces
+      - ./voice_cache:/app/voice_cache
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/persons', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    image: face-client
+    container_name: face-client
+    command: python client.py --server-ip server --no-debug
+    profiles: ["client"]
+    devices:
+      - /dev/video0:/dev/video0     # веб-камера (V4L2)
+    environment:
+      # Доступ к PulseAudio хоста для воспроизведения приветствий.
+      # Требуется также совпадение UID: запустите с
+      #   docker compose --profile client run --rm -u $(id -u):$(id -g) client
+      # либо впишите свой UID в user: ниже (id -u).
+      PULSE_SERVER: unix:/tmp/pulse/native
+      # XDG_RUNTIME_DIR обычно /run/user/1000
+    volumes:
+      - /run/user/1000/pulse/native:/tmp/pulse/native
+    user: "1000"
+    # Вариант без PulseAudio (прямая ALSA):
+    #   раскомментируйте и уберите volume/environment выше
+    # devices:
+    #   - /dev/snd:/dev/snd
+    network_mode: bridge
+    restart: unless-stopped
