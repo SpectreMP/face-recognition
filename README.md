@@ -86,7 +86,7 @@ pip install -r requirenments.txt
 Linux: для офлайн-синтеза речи нужен движок TTS:
 
 ```bash
-sudo apt install espeak-ng libespeak1      # pyttsx3 использует его автоматически
+sudo apt install espeak-ng dlib      # pyttsx3 использует его автоматически
 ```
 
 
@@ -179,3 +179,34 @@ python e2e_check.py --image known_faces/michael.jpg   # полный цикл б
 | Камера не открыта | Проверьте `--camera-id`; в контейнере — что `/dev/video0` проброшен |
 | Приветствие приходит текстом, без аудио | Человек добавлен недавно — фраза ещё синтезируется; следующее через `--greet-cooldown` будет со звуком |
 | Первая сборка docker идёт долго | Это компиляция dlib (~5 мин); дальше берётся из кэша слоёв |
+| При импорте `import dlib` / `import face_recognition` ошибка `ImportError: libjxl.so.0.11: cannot open shared object file` | Prebuild-колесо `dlib` ссылается на более старую версию `libjxl`, чем установлена в системе (напр. в системе только `libjxl.so.0.12`). Решение — сделать симлинки под нужный SONAME (см. ниже) |
+
+### Ошибка libjxl.so.0.NN у предустановленного dlib
+
+Prebuild-колесо `dlib` (ставится вместе с `face_recognition`) динамически линкуется с определённой **SONAME-версией** `libjxl` (например `libjxl.so.0.11`). Если в системе стоит другая минорная версия (например `libjxl.so.0.12`), импорт dlib падает.
+
+Узнать, каких именно библиотек не хватает:
+
+```bash
+ldd venv/lib/python3.10/site-packages/_dlib_pybind11*.so | grep 'not found'
+```
+
+Какие реальные версии установлены в системе:
+
+```bash
+ls /usr/lib/libjxl*.so.*
+```
+
+Если нужна только чуть более старая минорная версия — достаточно сделать симлинки (ABI между минорными версиями libjxl стабилен):
+
+```bash
+sudo ln -s /usr/lib/libjxl.so.0.12 /usr/lib/libjxl.so.0.11
+sudo ln -s /usr/lib/libjxl_cms.so.0.12 /usr/lib/libjxl_cms.so.0.11
+sudo ln -s /usr/lib/libjxl_threads.so.0.12 /usr/lib/libjxl_threads.so.0.11
+```
+
+(Имена `.0.11`/`.0.12` замените на ваши версии из `ls` выше.) После этого проверьте:
+
+```bash
+python -c "import dlib, face_recognition; print('ok')"
+```
